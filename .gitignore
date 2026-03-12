@@ -1,0 +1,8 @@
+CLAUDE.md
+.claude/
+.DS_Store
+__pycache__/
+*.pyc
+data/
+results/*.pt
+pyrightconfig.json
