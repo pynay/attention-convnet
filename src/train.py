@@ -1,5 +1,5 @@
 """
-Training pipeline for CIFAR-10 image classification.
+Training pipeline for CIFAR-10/CIFAR-100 image classification.
 
 Provides data loading with standard augmentation, train/eval loops, and a
 full training pipeline with CosineAnnealingLR scheduling. Supports MPS
@@ -21,8 +21,12 @@ from torchvision import datasets, transforms
 from .models import get_model, count_parameters
 
 # CIFAR-10 channel-wise mean and std, precomputed from the training set.
+# CIFAR-100 shares the same image pool, so these stats are reused for both.
 CIFAR10_MEAN = (0.4914, 0.4822, 0.4465)
 CIFAR10_STD = (0.2470, 0.2435, 0.2616)
+
+DATASET_CLASSES = {"cifar10": datasets.CIFAR10, "cifar100": datasets.CIFAR100}
+DATASET_NUM_CLASSES = {"cifar10": 10, "cifar100": 100}
 
 
 def set_seed(seed: int = 42):
@@ -47,15 +51,22 @@ def get_dataloaders(
     batch_size: int = 128,
     num_workers: int = 2,
     data_dir: str = "./data",
+    dataset: str = "cifar10",
 ) -> tuple[DataLoader, DataLoader]:
-    """Create CIFAR-10 train and test data loaders.
+    """Create CIFAR-10 or CIFAR-100 train and test data loaders.
 
     Training augmentation: RandomCrop(32, pad=4) + RandomHorizontalFlip.
-    These are standard CIFAR-10 augmentations that provide regularization
+    These are standard CIFAR augmentations that provide regularization
     without being overly aggressive for 32x32 images.
 
-    Both splits are normalized with precomputed CIFAR-10 channel statistics.
+    Both splits are normalized with precomputed channel statistics (shared
+    between CIFAR-10 and CIFAR-100 since they use the same image pool).
     """
+    if dataset not in DATASET_CLASSES:
+        raise ValueError(f"Unknown dataset: {dataset}. Choose from {list(DATASET_CLASSES)}")
+
+    dataset_cls = DATASET_CLASSES[dataset]
+
     train_transform = transforms.Compose([
         transforms.RandomCrop(32, padding=4),
         transforms.RandomHorizontalFlip(),
@@ -67,8 +78,8 @@ def get_dataloaders(
         transforms.Normalize(CIFAR10_MEAN, CIFAR10_STD),
     ])
 
-    train_dataset = datasets.CIFAR10(root=data_dir, train=True, download=True, transform=train_transform)
-    test_dataset = datasets.CIFAR10(root=data_dir, train=False, download=True, transform=test_transform)
+    train_dataset = dataset_cls(root=data_dir, train=True, download=True, transform=train_transform)
+    test_dataset = dataset_cls(root=data_dir, train=False, download=True, transform=test_transform)
 
     # pin_memory speeds up CPU->GPU transfers on CUDA but is unsupported on MPS
     use_pin_memory = torch.cuda.is_available()
@@ -183,23 +194,30 @@ def train(config: dict) -> dict:
     save_dir = config.get("save_dir", "./results")
     seed = config.get("seed", 42)
 
+    # Dataset selection — auto-set num_classes if not explicitly provided
+    dataset = config.get("dataset", "cifar10")
+    if "num_classes" not in config:
+        config["num_classes"] = DATASET_NUM_CLASSES.get(dataset, 10)
+
     # Auto-generate run name from config if not provided
     run_name = config.get("run_name")
     if run_name is None:
         model_type = config.get("model_type", "baseline")
+        # Prefix with dataset name for non-default datasets to avoid result collisions
+        prefix = f"{dataset}_" if dataset != "cifar10" else ""
         if model_type == "attention":
             positions = config.get("attention_positions", [1, 2])
             attn_type = config.get("attention_type", "spatial")
-            run_name = f"{attn_type}_attn_pos{''.join(map(str, positions))}"
+            run_name = f"{prefix}{attn_type}_attn_pos{''.join(map(str, positions))}"
         else:
-            run_name = "baseline"
+            run_name = f"{prefix}baseline"
 
     set_seed(seed)
     device = get_device()
     print(f"Device: {device}")
 
     # Data
-    train_loader, test_loader = get_dataloaders(batch_size, num_workers, data_dir)
+    train_loader, test_loader = get_dataloaders(batch_size, num_workers, data_dir, dataset)
 
     # Model
     model = get_model(config).to(device)
@@ -270,7 +288,8 @@ def train(config: dict) -> dict:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Train CNN on CIFAR-10")
+    parser = argparse.ArgumentParser(description="Train CNN on CIFAR-10/CIFAR-100")
+    parser.add_argument("--dataset", type=str, default="cifar10", choices=["cifar10", "cifar100"])
     parser.add_argument("--model-type", type=str, default="baseline", choices=["baseline", "attention"])
     parser.add_argument("--attention-positions", type=int, nargs="+", default=[1, 2])
     parser.add_argument("--attention-type", type=str, default="spatial", choices=["spatial", "channel"])
