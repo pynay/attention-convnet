@@ -1,6 +1,7 @@
 # Attention-Augmented CNN for Image Classification
 
-[![Video Presentation](https://img.shields.io/badge/▶_Video_Presentation-Watch_on_YouTube-red?style=for-the-badge&logo=youtube)](https://www.youtube.com/watch?v=0mAKfz8cra8)
+
+Demo Video: https://www.youtube.com/watch?v=0mAKfz8cra8)
 
 Investigating whether lightweight self-attention modules improve CNN-based image classification on CIFAR-10 and CIFAR-100.
 
