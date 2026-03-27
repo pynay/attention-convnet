@@ -1,7 +1,7 @@
 # Attention-Augmented CNN for Image Classification
 
 
-Demo Video: https://www.youtube.com/watch?v=0mAKfz8cra8)
+Demo Video: https://www.youtube.com/watch?v=0mAKfz8cra8
 
 Investigating whether lightweight self-attention modules improve CNN-based image classification on CIFAR-10 and CIFAR-100.
 
